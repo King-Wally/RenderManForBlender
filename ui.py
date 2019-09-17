@@ -1000,6 +1000,7 @@ class DATA_PT_renderman_node_shader_light(ShaderNodePanel, Panel):
 class DATA_PT_renderman_display_filters(CollectionPanel, Panel):
     bl_label = "Display Filters"
     bl_context = 'scene'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw_item(self, layout, context, item):
         layout.prop(item, 'filter_type')
@@ -1014,6 +1015,9 @@ class DATA_PT_renderman_display_filters(CollectionPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
         scene = context.scene
         rm = scene.renderman
 
@@ -1025,10 +1029,10 @@ class DATA_PT_renderman_display_filters(CollectionPanel, Panel):
 class DATA_PT_renderman_Sample_filters(CollectionPanel, Panel):
     bl_label = "Sample Filters"
     bl_context = 'scene'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw_item(self, layout, context, item):
         layout.prop(item, 'filter_type')
-        layout.separator()
         filter_node = item.get_filter_node()
         draw_props(filter_node, filter_node.prop_names, layout)
 
@@ -1039,6 +1043,9 @@ class DATA_PT_renderman_Sample_filters(CollectionPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
         scene = context.scene
         rm = scene.renderman
 
@@ -1050,6 +1057,7 @@ class DATA_PT_renderman_Sample_filters(CollectionPanel, Panel):
 class DATA_PT_renderman_node_filters_light(CollectionPanel, Panel):
     bl_label = "Light Filters"
     bl_context = 'data'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw_item(self, layout, context, item):
         layout.prop(item, 'filter_name')
@@ -1063,6 +1071,9 @@ class DATA_PT_renderman_node_filters_light(CollectionPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
         light = context.light
 
         self._draw_collection(context, layout, light.renderman, "",
@@ -1739,6 +1750,7 @@ class PRMAN_PT_Renderman_Light_Panel(CollectionPanel, Panel):
     bl_context = "scene"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'  # bl_category = "Renderman"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
@@ -1868,6 +1880,7 @@ class PRMAN_PT_Renderman_Light_Link_Panel(CollectionPanel, Panel):
     bl_context = "scene"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'  # bl_category = "Renderman"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -1944,6 +1957,7 @@ class PRMAN_PT_Renderman_Object_Panel(CollectionPanel, Panel):
     bl_context = "scene"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'  # bl_category = "Renderman"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
