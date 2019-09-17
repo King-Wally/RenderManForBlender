@@ -1382,7 +1382,7 @@ class OBJECT_PT_renderman_object_matteid(Panel, _RManPanelHeader):
 
 class RENDER_PT_layer_custom_aovs(CollectionPanel, Panel):
     bl_label = "Passes"
-    bl_context = "render_layer"
+    bl_context = "view_layer"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
 
