@@ -575,21 +575,25 @@ class RENDER_PT_renderman_advanced_settings(PRManButtonsPanel, Panel):
 class MESH_PT_renderman_prim_vars(CollectionPanel, Panel):
     bl_context = "data"
     bl_label = "Primitive Variables"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw_item(self, layout, context, item):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
         ob = context.object
         if context.mesh:
             geo = context.mesh
         layout.prop(item, "name")
 
-        row = layout.row()
-        row.prop(item, "data_source", text="Source")
+        col = layout.column()
+        col.prop(item, "data_source", text="Source")
         if item.data_source == 'VERTEX_COLOR':
-            row.prop_search(item, "data_name", geo, "vertex_colors", text="")
+            col.prop_search(item, "data_name", geo, "vertex_colors", text="")
         elif item.data_source == 'UV_TEXTURE':
-            row.prop_search(item, "data_name", geo, "uv_textures", text="")
+            col.prop_search(item, "data_name", geo, "uv_textures", text="")
         elif item.data_source == 'VERTEX_GROUP':
-            row.prop_search(item, "data_name", ob, "vertex_groups", text="")
+            col.prop_search(item, "data_name", ob, "vertex_groups", text="")
 
     @classmethod
     def poll(cls, context):
@@ -599,6 +603,8 @@ class MESH_PT_renderman_prim_vars(CollectionPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
         mesh = context.mesh
         rm = mesh.renderman
 
@@ -1545,6 +1551,8 @@ class PARTICLE_PT_renderman_particle(ParticleButtonsPanel, Panel, _RManPanelHead
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
 
         # XXX todo: handle strands properly
 
@@ -1554,6 +1562,8 @@ class PARTICLE_PT_renderman_particle(ParticleButtonsPanel, Panel, _RManPanelHead
         is_rman_interactive_running = rman_render.rman_interactive_running        
 
         col = layout.column()
+        row = col.row()
+        row.use_property_split = False
 
         #col.enabled = not is_rman_interactive_running
         if psys.settings.type == 'EMITTER':
@@ -1569,7 +1579,7 @@ class PARTICLE_PT_renderman_particle(ParticleButtonsPanel, Panel, _RManPanelHead
 
         '''
         if psys.settings.type == 'EMITTER':
-            col.row().prop(rm, "particle_type", expand=True)
+            row.row().prop(rm, "particle_type", expand=True)
             if rm.particle_type == 'OBJECT':
                 col.prop_search(rm, "particle_instance_object", bpy.data,
                                 "objects", text="")
@@ -1609,6 +1619,7 @@ class PARTICLE_PT_renderman_particle(ParticleButtonsPanel, Panel, _RManPanelHead
 class PARTICLE_PT_renderman_prim_vars(CollectionPanel, Panel):
     bl_context = "particle"
     bl_label = "Primitive Variables"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw_item(self, layout, context, item):
         ob = context.object
@@ -1626,6 +1637,8 @@ class PARTICLE_PT_renderman_prim_vars(CollectionPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
         psys = context.particle_system
         rm = psys.settings.renderman
 
