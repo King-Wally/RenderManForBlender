@@ -246,30 +246,49 @@ class RENDER_PT_renderman_integrator(PRManButtonsPanel, Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
-        self.layout.use_property_split = True
-        self.layout.use_property_decorate = False
-
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
         scene = context.scene
         rm = scene.renderman
 
-        col = layout.column()
-        row = col.row(align=True)
-
-        col.prop(rm, "integrator")
-        # find args for integrators here!
         integrator_settings = getattr(rm, "%s_settings" % rm.integrator)
 
-        # TODO: Remove show integrator settings button
-        icon = 'DISCLOSURE_TRI_DOWN' if rm.show_integrator_settings \
-            else 'DISCLOSURE_TRI_RIGHT'
-        text = rm.integrator + " Settings:"
+        col = layout.column()
+        col.prop(rm, "integrator")
 
-        row = col.row()
-        row.prop(rm, "show_integrator_settings", icon=icon, text=text,
-                         emboss=False)
-        if rm.show_integrator_settings:
-            draw_props(integrator_settings, integrator_settings.prop_names, col)
+        layout.separator()
+        col = layout.column()
+
+        draw_integrator(integrator_settings, integrator_settings.prop_names, col)
+
+
+def draw_integrator(node, prop_names, layout):
+    col = layout.column()
+    for prop_name in prop_names:
+        prop_meta = node.prop_meta[prop_name]
+        prop = getattr(node, prop_name)
+        row = layout.row()
+
+        if prop_meta['renderman_type'] == 'page':
+
+            ui_prop = prop_name + "_uio"
+            ui_open = getattr(node, ui_prop)
+            icon = 'DISCLOSURE_TRI_DOWN' if ui_open \
+                else 'DISCLOSURE_TRI_RIGHT'
+
+            split = layout.split(factor = 0)
+            row = split.row()
+            row.prop(node, ui_prop, icon=icon, text='',
+                     icon_only=True, emboss=False)
+            row.label(text=prop_name.split('.')[-1] + ':')
+
+            if ui_open:
+                draw_props(node, prop, layout)
+
+        else:
+            row.prop(node, prop_name)
 
 
 class RENDER_PT_renderman_spooling(PRManButtonsPanel, Panel):
