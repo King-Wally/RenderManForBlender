@@ -664,7 +664,7 @@ def generate_node_type(prefs, name, args):
 
     ntype.init = init
     ntype.free = free
-    
+
     if "__annotations__" not in ntype.__dict__:
             setattr(ntype, "__annotations__", {})
 
@@ -863,7 +863,6 @@ def draw_node_properties_recursive(layout, context, nt, node, level=0):
                             else 'DISCLOSURE_TRI_RIGHT'
 
                         split = layout.split(factor=NODE_LAYOUT_SPLIT)
-                        row = split.row()
                         for i in range(level):
                             row.label(text='', icon='BLANK1')
 
@@ -877,7 +876,7 @@ def draw_node_properties_recursive(layout, context, nt, node, level=0):
                                     sub_prop_names.remove(pn)
                                     break
 
-                        row.label(text=prop_name.split('.')[-1] + ':')
+                        row.label(text=prop_name + ':')
 
                         if ui_open:
                             draw_props(sub_prop_names, layout, level + 1)

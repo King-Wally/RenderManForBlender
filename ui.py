@@ -937,7 +937,6 @@ class MATERIAL_PT_renderman_shader_surface(ShaderPanel, Panel):
             else:
                 if not panel_node_draw(layout, context, mat, 'ShaderNodeOutputMaterial', 'Surface'):
                     layout.prop(mat, "diffuse_color")
-            layout.separator()
 
         else:
             # if no nodetree we use pxrdisney
