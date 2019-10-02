@@ -27,6 +27,7 @@ import bpy
 import math
 import blf
 from bpy.types import Panel
+from bl_ui.utils import PresetPanel
 from .nodes import NODE_LAYOUT_SPLIT, is_renderman_nodetree, panel_node_draw
 
 from . import engine
@@ -223,8 +224,18 @@ class RENDER_PT_renderman_render(PRManButtonsPanel, Panel):
         col.prop(rm, "do_denoise")
         col.prop(rm, "do_holdout_matte", text="Render Holdouts")
 
+class RENDER_PT_renderman_presets(PresetPanel, Panel):
+    bl_label = "RenderMan Presets"
+    preset_subdir = os.path.join("renderman", "render")
+    preset_operator = "script.execute_preset"
+    preset_add_operator = "render.renderman_preset_add"
+    COMPAT_ENGINES = {'PRMAN_RENDER'}
+
 class RENDER_PT_renderman_sampling(PRManButtonsPanel, Panel):
     bl_label = "Sampling"
+
+    def draw_header_preset(self, context):
+        RENDER_PT_renderman_presets.draw_panel_header(self.layout)
 
     def draw(self, context):
         self.layout.use_property_split = True
@@ -233,15 +244,6 @@ class RENDER_PT_renderman_sampling(PRManButtonsPanel, Panel):
         layout = self.layout
         scene = context.scene
         rm = scene.renderman
-
-        # layout.prop(rm, "display_driver")
-
-        ## TODO: move preset to header
-        col = layout.column()
-        row = col.row(align=True)
-        row.menu("PRMAN_MT_presets", text=bpy.types.WM_MT_operator_presets.bl_label)
-        row.operator("render.renderman_preset_add", text="", icon='ADD')
-        row.operator("render.renderman_preset_add", text="",icon='REMOVE').remove_active = True
 
         col = layout.column(align=True)
         col.prop(rm, "min_samples", text="Min Samples")
@@ -3136,6 +3138,7 @@ class PRMAN_PT_context_material(_RManPanelHeader, Panel):
 
 classes = [
     RENDER_PT_renderman_render,
+    RENDER_PT_renderman_presets,
     RENDER_PT_renderman_sampling,
     RENDER_PT_renderman_sampling_preview,
     RENDER_PT_renderman_integrator,

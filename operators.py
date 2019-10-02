@@ -217,14 +217,14 @@ class SHADING_OT_add_renderman_nodetree(bpy.types.Operator):
 
         if idtype == 'material':
             output = nt.nodes.new('RendermanOutputNode')
-            
+
             # if not convert_cycles_nodetree(idblock, output, self.report):
             #     default = nt.nodes.new('%sBxdfNode' %
             #                            self.properties.bxdf_name)
             #     default.location = output.location
             #     default.location[0] -= 300
             #     nt.links.new(default.outputs[0], output.inputs[0])
-            
+
             default = nt.nodes.new('%sBxdfNode' %
                                     self.properties.bxdf_name)
             default.location = output.location
@@ -237,7 +237,7 @@ class SHADING_OT_add_renderman_nodetree(bpy.types.Operator):
 
 
             default.location[0] -= 300
-            nt.links.new(default.outputs[0], output.inputs[0])                
+            nt.links.new(default.outputs[0], output.inputs[0])
         elif idtype == 'light':
             light_type = idblock.type
             if light_type == 'SUN':
@@ -294,20 +294,20 @@ class PRMAN_OT_refresh_osl_shader(bpy.types.Operator):
     def invoke(self, context, event):
         context.node.RefreshNodes(context)
         return {'FINISHED'}
-        
+
 class PRMAN_OT_RendermanBake(bpy.types.Operator):
     bl_idname = "renderman.bake"
     bl_label = "Baking"
     bl_description = "Bake pattern nodes to texture"
     rpass = None
     is_running = False
-    
+
     def gen_rib_frame(self, rpass):
         try:
             rpass.gen_rib(convert_textures=False)
         except Exception as err:
             self.report({'ERROR'}, 'Rib gen error: ' + traceback.format_exc())
-            
+
     def execute(self, context):
         if engine.ipr:
             self.report(
@@ -512,28 +512,28 @@ class PRMAN_OT_StartInteractive(bpy.types.Operator):
                 engine.ipr_handle = bpy.types.SpaceView3D.draw_handler_add(
                     self.draw, (context,), 'WINDOW', 'POST_PIXEL')
             if engine.rman__sg__inited:
-                
+
                 bpy.app.handlers.depsgraph_update_post.append(
-                    engine.ipr.blender_scene_updated_pre_cb)                
+                    engine.ipr.blender_scene_updated_pre_cb)
                 bpy.app.handlers.depsgraph_update_post.append(
                     engine.ipr.blender_scene_updated_cb)
                 bpy.app.handlers.frame_change_post.append(
                     engine.ipr.blender_scene_updated_cb)
                 bpy.app.handlers.redo_post.append(
-                    engine.ipr.blender_scene_updated_cb)                                         
+                    engine.ipr.blender_scene_updated_cb)
             bpy.app.handlers.load_pre.append(self.invoke)
             bpy.ops.render.render()
         else:
             if engine.rman__sg__inited:
                 bpy.app.handlers.depsgraph_update_post.remove(
-                    engine.ipr.blender_scene_updated_pre_cb)                
+                    engine.ipr.blender_scene_updated_pre_cb)
                 bpy.app.handlers.depsgraph_update_post.remove(
-                    engine.ipr.blender_scene_updated_cb)                
+                    engine.ipr.blender_scene_updated_cb)
                 bpy.app.handlers.frame_change_post.remove(
                     engine.ipr.blender_scene_updated_cb)
                 bpy.app.handlers.redo_post.remove(
-                    engine.ipr.blender_scene_updated_cb)                                              
-                    
+                    engine.ipr.blender_scene_updated_cb)
+
             # The user should not turn this on and off during IPR rendering.
             if addon_prefs.draw_ipr_text:
                 bpy.types.SpaceView3D.draw_handler_remove(
@@ -627,7 +627,7 @@ class PRMAN_OT_AddPresetRendermanRender(AddPresetBase, bpy.types.Operator):
     bl_idname = "render.renderman_preset_add"
     bl_label = "Add RenderMan Preset"
     bl_options = {'REGISTER', 'UNDO'}
-    preset_menu = "PRMAN_MT_presets"
+    preset_menu = "RENDER_PT_renderman_presets"
     preset_defines = ["scene = bpy.context.scene", ]
 
     preset_values = [
@@ -708,14 +708,6 @@ class RendermanRenderPresets():
         "rm.PxrPathTracer_settings.maxPathLength = 10",
         "rm.enable_external_rendering = True",
         "rm.external_action = \'spool\'", ]
-
-
-class PRMAN_MT_PresetsMenu(bpy.types.Menu):
-    bl_label = "RenderMan Presets"
-    bl_idname = "PRMAN_MT_presets"
-    preset_subdir = os.path.join("renderman", "render")
-    preset_operator = "script.execute_preset"
-    draw = bpy.types.Menu.draw_preset
 
 #################
 # Sample scenes menu.
@@ -1438,7 +1430,6 @@ classes = [
     PRMAN_OT_StartInteractive,
     PRMAN_OT_ExportRIBObject,
     PRMAN_OT_AddPresetRendermanRender,
-    PRMAN_MT_PresetsMenu,
     PRMAN_OT_examplesRenderman,
     PRMAN_MT_LoadSceneMenu,
     COLLECTION_OT_add_remove,
@@ -1470,7 +1461,7 @@ classes = [
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-    
+
     bpy.types.TEXT_MT_text.append(compile_shader_menu_func)
     bpy.types.TEXT_MT_toolbox.append(compile_shader_menu_func)
     bpy.types.TOPBAR_MT_help.append(menu_draw)
@@ -1495,8 +1486,8 @@ def unregister():
     bpy.types.TEXT_MT_text.remove(compile_shader_menu_func)
     bpy.types.TEXT_MT_toolbox.remove(compile_shader_menu_func)
     bpy.types.TOPBAR_MT_help.remove(menu_draw)
-    
+
     # It should be fine to leave presets registered as they are not in memory.
-    
+
     for cls in classes:
         bpy.utils.unregister_class(cls)
