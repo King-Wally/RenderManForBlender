@@ -283,6 +283,80 @@ class RENDER_PT_renderman_sampling_preview(PRManButtonsPanel, Panel):
         col.prop(rm, "preview_max_specular_depth", text="Specular Depth")
         col.prop(rm, "preview_max_diffuse_depth", text="Diffuse Depth")
 
+subpanel_classes = []
+
+
+def draw_subpanel(panel):
+    def panel_set(panel, context):
+        if panel == "integrator":
+            scene = context.scene
+            rm = scene.renderman
+            settings = getattr(rm, "%s_settings" % rm.integrator)
+
+        if panel == "world":
+            world = context.scene.world
+            settings = world.renderman.get_light_node()
+
+        if panel == "light":
+            light = context.light
+            settings = light.renderman.get_light_node()
+
+        if panel == "camera":
+            cam = context.camera
+            settings = cam.renderman.get_projection_node()
+        return settings
+
+    @classmethod
+    def poll(self, context):
+
+        if panel == "world" and context.scene.world.renderman.renderman_type == 'NONE':
+            return
+        elif panel == "camera" and context.camera.renderman.projection_type == 'none':
+            return False
+        elif panel == "light" and context.light.renderman.use_renderman_node == False:
+            return
+        else:
+            panel_settings = panel_set(panel, context)
+            return draw_panel(panel_settings, panel_settings.prop_names, self.number) == 'open'
+
+
+    def draw_header(self, context):
+        panel_settings = panel_set(panel, context)
+
+        layout = self.layout
+        draw_properties(panel_settings, panel_settings.prop_names, layout, "header" , self.number)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        panel_settings = panel_set(panel, context)
+
+        col = layout.column()
+        draw_properties(panel_settings, panel_settings.prop_names, col, "subpanel" , self.number)
+
+    for i in range(10):
+        idname = "RENDER_PT_renderman_"+panel+"_subpanel_%d" % i
+        if panel == "integrator":
+            parent = "RENDER_PT_renderman_integrator"
+        if panel == "world":
+            parent = "DATA_PT_renderman_world"
+        if panel == "light":
+            parent = "DATA_PT_renderman_light"
+        if panel == "camera":
+            parent = "DATA_PT_renderman_camera"
+        index = i
+
+        opclass = type("RENDER_PT_renderman_subpanel_%d" % i,
+               (PRManButtonsPanel, Panel),
+               {"bl_idname": idname, "bl_label": " ", "bl_options": {'DEFAULT_CLOSED'},
+               "number": index,
+               "bl_parent_id": parent,
+               "poll": poll, "draw": draw, "draw_header": draw_header},
+               )
+        subpanel_classes.append(opclass)
+
 
 class RENDER_PT_renderman_integrator(PRManButtonsPanel, Panel):
     bl_label = "Integrator"
@@ -304,35 +378,46 @@ class RENDER_PT_renderman_integrator(PRManButtonsPanel, Panel):
         layout.separator()
         col = layout.column()
 
-        draw_integrator(integrator_settings, integrator_settings.prop_names, col)
+        draw_properties(integrator_settings, integrator_settings.prop_names, col, "panel", 0)
 
+    draw_subpanel("integrator")
 
-def draw_integrator(node, prop_names, layout):
+def draw_properties(node, prop_names, layout, place, number):
     col = layout.column()
+    props_list = []
     for prop_name in prop_names:
         prop_meta = node.prop_meta[prop_name]
         prop = getattr(node, prop_name)
-        row = layout.row()
+
+        if prop_name == "Notes":
+            continue
 
         if prop_meta['renderman_type'] == 'page':
+            props_list.append(prop_name)
 
-            ui_prop = prop_name + "_uio"
-            ui_open = getattr(node, ui_prop)
-            icon = 'DISCLOSURE_TRI_DOWN' if ui_open \
-                else 'DISCLOSURE_TRI_RIGHT'
+        if prop_meta['renderman_type'] != 'page' and place == "panel":
+            col.prop(node, prop_name)
 
-            split = layout.split(factor = 0)
-            row = split.row()
-            row.prop(node, ui_prop, icon=icon, text='',
-                     icon_only=True, emboss=False)
-            row.label(text=prop_name.split('.')[-1] + ':')
+    if place == "header":
+        return layout.label(text = props_list[number])
 
-            if ui_open:
-                draw_props(node, prop, layout)
+    if place == "subpanel":
+        props_list_attr = getattr(node, props_list[number])
+        for prop in props_list_attr:
+            col.prop(node, prop)
 
-        else:
-            row.prop(node, prop_name)
+def draw_panel(node, prop_names, number):
+    props_list = []
+    for prop_name in prop_names:
+        prop_meta = node.prop_meta[prop_name]
+        if prop_name == "Notes":
+            continue
 
+        if prop_meta['renderman_type'] == 'page':
+            props_list.append(prop_name)
+    count = len(props_list)
+    if number < count:
+        return "open"
 
 class RENDER_PT_renderman_spooling(PRManButtonsPanel, Panel):
     bl_label = "External Rendering"
@@ -471,52 +556,6 @@ class RENDER_PT_renderman_spooling_alf_options(PRManButtonsPanel, Panel):
         col.prop(rm, 'checkpoint_type')
         col.prop(rm, 'checkpoint_interval')
         col.prop(rm, 'render_limit')
-
-# only used by integrator panel
-def draw_props(node, prop_names, layout):
-    for prop_name in prop_names:
-        prop_meta = node.prop_meta[prop_name]
-        prop = getattr(node, prop_name)
-        row = layout.row()
-
-        if prop_meta['renderman_type'] == 'page':
-            ui_prop = prop_name + "_uio"
-            ui_open = getattr(node, ui_prop)
-            icon = 'DISCLOSURE_TRI_DOWN' if ui_open \
-                else 'DISCLOSURE_TRI_RIGHT'
-
-            split = layout.split(factor=NODE_LAYOUT_SPLIT)
-            row = split.row()
-            row.prop(node, ui_prop, icon=icon, text='',
-                     icon_only=True, emboss=False)
-            row.label(text=prop_name.split('.')[-1] + ':')
-
-            if ui_open:
-                draw_props(node, prop, layout)
-
-        else:
-            if 'widget' in prop_meta and prop_meta['widget'] == 'null' or \
-                    'hidden' in prop_meta and prop_meta['hidden'] or prop_name == 'combineMode':
-                continue
-
-            row.label(text='', icon='BLANK1')
-            # indented_label(row, socket.name+':')
-            if "Subset" in prop_name and prop_meta['type'] == 'string':
-                row.prop_search(node, prop_name, bpy.data.scenes[0].renderman,
-                                "object_groups")
-            else:
-                if 'widget' in prop_meta and prop_meta['widget'] == 'floatRamp':
-                    rm = bpy.context.light.renderman
-                    nt = bpy.context.light.node_tree
-                    float_node = nt.nodes[rm.float_ramp_node]
-                    layout.template_curve_mapping(float_node, 'mapping')
-                elif 'widget' in prop_meta and prop_meta['widget'] == 'colorRamp':
-                    rm = bpy.context.light.renderman
-                    nt = bpy.context.light.node_tree
-                    ramp_node = nt.nodes[rm.color_ramp_node]
-                    layout.template_color_ramp(ramp_node, 'color_ramp')
-                else:
-                    row.prop(node, prop_name)
 
 
 class RENDER_PT_renderman_motion_blur(PRManButtonsPanel, Panel):
@@ -932,39 +971,37 @@ class DATA_PT_renderman_camera(ShaderPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
         cam = context.camera
         scene = context.scene
+        col = layout.column()
 
-        row = layout.row()
-        row.prop(cam.dof, "use_dof")
-        sub = row.row()
-        sub.enabled = cam.dof.use_dof
-        sub.prop(cam.dof, "aperture_fstop")
+        col.prop(cam.dof, "use_dof")
+        col = layout.column()
+        col.enabled = cam.dof.use_dof
+        col.prop(cam.dof, "aperture_fstop")
+        col = layout.column()
+        col.prop(cam.dof, "focus_object")
+        col = layout.column()
+        col.active = (cam.dof.focus_object is None)
+        col.prop(cam.dof, "focus_distance", text="Distance")
+        col = layout.column(align = True)
 
-        split = layout.split()
-
-        col = split.column()
-
-        col.label(text="Focus:")
-        col.prop(cam.dof, "focus_object", text="")
-        sub = col.column()
-        sub.active = (cam.dof.focus_object is None)
-        sub.prop(cam.dof, "focus_distance", text="Distance")
-
-        col = split.column()
-        sub = col.column(align=True)
-        sub.label(text="Aperture Controls:")
-        sub.prop(cam.dof, "aperture_ratio", text="Ratio")
-        sub.prop(cam.dof, "aperture_blades", text="Blades")
-        sub.prop(cam.dof, "aperture_rotation", text="Rotation")
-        sub.prop(cam.renderman, "aperture_roundness", text="Roundness")
-        sub.prop(cam.renderman, "aperture_density", text="Density")
+        col.label(text="Aperture Controls:")
+        col.prop(cam.dof, "aperture_ratio", text="Ratio")
+        col.prop(cam.dof, "aperture_blades", text="Blades")
+        col.prop(cam.dof, "aperture_rotation", text="Rotation")
+        col.prop(cam.renderman, "aperture_roundness", text="Roundness")
+        col.prop(cam.renderman, "aperture_density", text="Density")
 
         layout.prop(cam.renderman, "projection_type")
         if cam.renderman.projection_type != 'none':
             projection_node = cam.renderman.get_projection_node()
-            draw_props(projection_node, projection_node.prop_names, layout)
+            draw_properties(projection_node, projection_node.prop_names, layout,  "panel", 0)
 
+    draw_subpanel("camera")
 
 class DATA_PT_renderman_world(ShaderPanel, Panel):
     bl_context = "world"
@@ -973,21 +1010,22 @@ class DATA_PT_renderman_world(ShaderPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_decorate = False
+
         world = context.scene.world
 
         if not world.renderman.use_renderman_node:
-            #FIXME layout.prop(world, "horizon_color")
+            layout.use_property_split = False
             layout.operator('shading.add_renderman_nodetree').idtype = 'world'
             return
         else:
             layout.prop(world.renderman, "renderman_type", expand=True)
+            layout.use_property_split = True
             if world.renderman.renderman_type == 'NONE':
                 return
             layout.prop(world.renderman, 'light_primary_visibility')
-            light_node = world.renderman.get_light_node()
-            if light_node:
-                draw_props(light_node, light_node.prop_names, layout)
 
+    draw_subpanel("world")
 
 class DATA_PT_renderman_light(ShaderPanel, Panel):
     bl_context = "data"
@@ -1005,48 +1043,36 @@ class DATA_PT_renderman_light(ShaderPanel, Panel):
             #layout.operator('shading.convert_cycles_stuff')
             return
         else:
+            layout.use_property_decorate = False
+            layout.use_property_split = True
             if ipr_running:
-                layout.label(
-                    text="Note: Some items cannot be edited while IPR running.")
+                layout.label(text="Note: Some items cannot be edited while IPR running.")
             row = layout.row()
             row.enabled = not ipr_running
-            row.prop(light.renderman, "renderman_type", expand=True)
+            row.prop(light.renderman, "renderman_type")
             if light.renderman.renderman_type == 'FILTER':
                 row = layout.row()
                 row.enabled = not ipr_running
-                row.prop(light.renderman, "filter_type", expand=True)
+                row.prop(light.renderman, "filter_type")
             if light.renderman.renderman_type == "AREA":
-                row = layout.row()
-                row.enabled = not ipr_running
-                row.prop(light.renderman, "area_shape", expand=True)
-                row = layout.row()
+                col = layout.column()
+                col.enabled = not ipr_running
+                col.prop(light.renderman, "area_shape")
                 if light.renderman.area_shape == "rect":
-                    row.prop(light, 'size', text="Size X")
-                    row.prop(light, 'size_y')
+                    col.prop(light, 'size', text="Size X")
+                    col.prop(light, 'size_y')
                 else:
-                    row.prop(light, 'size', text="Diameter")
+                    col.prop(light, 'size', text="Diameter")
             # layout.prop(light.renderman, "shadingrate")
 
         # layout.prop_search(light.renderman, "nodetree", bpy.data, "node_groups")
-        row = layout.row()
-        row.enabled = not ipr_running
-        row.prop(light.renderman, 'illuminates_by_default')
+        col = layout.column()
+        col.enabled = not ipr_running
+        col.prop(light.renderman, 'illuminates_by_default')
+        if light.renderman.renderman_type != 'FILTER':
+            layout.prop(light.renderman, 'light_primary_visibility')
 
-
-class DATA_PT_renderman_node_shader_light(ShaderNodePanel, Panel):
-    bl_label = "Light Shader"
-    bl_context = 'data'
-
-    def draw(self, context):
-        layout = self.layout
-        light = context.light
-
-        light_node = light.renderman.get_light_node()
-        if light_node:
-            if light.renderman.renderman_type != 'FILTER':
-                layout.prop(light.renderman, 'light_primary_visibility')
-            draw_props(light_node, light_node.prop_names, layout)
-
+    draw_subpanel("light")
 
 class DATA_PT_renderman_display_filters(CollectionPanel, Panel):
     bl_label = "Display Filters"
@@ -1057,7 +1083,7 @@ class DATA_PT_renderman_display_filters(CollectionPanel, Panel):
         layout.prop(item, 'filter_type')
         layout.separator()
         filter_node = item.get_filter_node()
-        draw_props(filter_node, filter_node.prop_names, layout)
+        draw_properties(filter_node, filter_node.prop_names, layout, "panel", 0)
 
     @classmethod
     def poll(cls, context):
@@ -1083,9 +1109,14 @@ class DATA_PT_renderman_Sample_filters(CollectionPanel, Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw_item(self, layout, context, item):
+        scene = context.scene
+        rm = scene.renderman
         layout.prop(item, 'filter_type')
         filter_node = item.get_filter_node()
-        draw_props(filter_node, filter_node.prop_names, layout)
+        draw_properties(filter_node, filter_node.prop_names, layout, "panel", 0)
+        if rm.sample_filters[0].filter_type == "PxrWatermarkFilter":
+            layout.label(text="TxMake Options:")
+            draw_properties(filter_node, filter_node.prop_names, layout, "subpanel", 0)
 
     @classmethod
     def poll(cls, context):
@@ -2574,7 +2605,6 @@ classes = [
     DATA_PT_renderman_camera,
     DATA_PT_renderman_world,
     DATA_PT_renderman_light,
-    DATA_PT_renderman_node_shader_light,
     DATA_PT_renderman_display_filters,
     DATA_PT_renderman_Sample_filters,
     DATA_PT_renderman_node_filters_light,
@@ -2598,6 +2628,8 @@ classes = [
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
+    for cls in subpanel_classes:
+        bpy.utils.register_class(cls)
 
     bpy.utils.register_class(RENDERMAN_GROUP_UL_List)
     bpy.utils.register_class(RENDERMAN_UL_LIGHT_list)
@@ -2620,6 +2652,9 @@ def unregister():
 
     for panel in get_panels():
         panel.COMPAT_ENGINES.remove('PRMAN_RENDER')
+
+    for cls in subpanel_classes:
+        bpy.utils.unregister_class(cls)
 
     for cls in classes:
         bpy.utils.unregister_class(cls)
