@@ -402,9 +402,20 @@ def draw_properties(node, prop_names, layout, place, number):
         return layout.label(text = props_list[number])
 
     if place == "subpanel":
-        props_list_attr = getattr(node, props_list[number])
-        for prop in props_list_attr:
-            col.prop(node, prop)
+        if props_list[number] == "Falloff" or props_list[number] == "Ramp":
+            rm = bpy.context.light.renderman
+            nt = bpy.context.light.node_tree
+            float_node = nt.nodes[rm.float_ramp_node]
+            layout.template_curve_mapping(float_node, 'mapping')
+        elif props_list[number] == "Color Ramp":
+            rm = bpy.context.light.renderman
+            nt = bpy.context.light.node_tree
+            ramp_node = nt.nodes[rm.color_ramp_node]
+            layout.template_color_ramp(ramp_node, 'color_ramp')
+        else:
+            props_list_attr = getattr(node, props_list[number])
+            for prop in props_list_attr:
+                col.prop(node, prop)
 
 def draw_panel(node, prop_names, number):
     props_list = []
