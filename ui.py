@@ -113,6 +113,7 @@ from bpy.props import (PointerProperty, StringProperty, BoolProperty,
                        EnumProperty, IntProperty, FloatProperty, FloatVectorProperty,
                        CollectionProperty)
 
+subpanel_classes = []
 
 # ------- Subclassed Panel Types -------
 class _RManPanelHeader():
@@ -160,10 +161,6 @@ class CollectionPanel(_RManPanelHeader):
                 getattr(ptr, collection_index) >= 0:
             item = getattr(ptr, prop_coll)[getattr(ptr, collection_index)]
             self.draw_item(layout, context, item)
-
-
-# ------- UI panel definitions -------
-narrowui = 180
 
 
 class PRManButtonsPanel(_RManPanelHeader):
@@ -258,10 +255,12 @@ class RENDER_PT_renderman_sampling(PRManButtonsPanel, Panel):
         col.prop(rm, 'incremental')
 
 
-class RENDER_PT_renderman_sampling_preview(PRManButtonsPanel, Panel):
+class RENDER_PT_renderman_sampling_preview(Panel):
     bl_label = "Interactive and Preview Sampling"
     bl_parent_id = 'RENDER_PT_renderman_sampling'
     bl_options = {'DEFAULT_CLOSED'}
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
 
     def draw(self, context):
         self.layout.use_property_split = True
@@ -282,8 +281,6 @@ class RENDER_PT_renderman_sampling_preview(PRManButtonsPanel, Panel):
         col = layout.column(align=True)
         col.prop(rm, "preview_max_specular_depth", text="Specular Depth")
         col.prop(rm, "preview_max_diffuse_depth", text="Diffuse Depth")
-
-subpanel_classes = []
 
 
 def draw_subpanel(panel):
@@ -312,7 +309,7 @@ def draw_subpanel(panel):
         if panel == "world" and context.scene.world.renderman.renderman_type == 'NONE':
             return
         elif panel == "camera" and context.camera.renderman.projection_type == 'none':
-            return False
+            return
         elif panel == "light" and context.light.renderman.use_renderman_node == False:
             return
         else:
@@ -340,12 +337,8 @@ def draw_subpanel(panel):
         idname = "RENDER_PT_renderman_"+panel+"_subpanel_%d" % i
         if panel == "integrator":
             parent = "RENDER_PT_renderman_integrator"
-        if panel == "world":
-            parent = "DATA_PT_renderman_world"
-        if panel == "light":
-            parent = "DATA_PT_renderman_light"
-        if panel == "camera":
-            parent = "DATA_PT_renderman_camera"
+        else:
+            parent = "DATA_PT_renderman_"+ panel
         index = i
 
         opclass = type("RENDER_PT_renderman_subpanel_%d" % i,
@@ -378,11 +371,11 @@ class RENDER_PT_renderman_integrator(PRManButtonsPanel, Panel):
         layout.separator()
         col = layout.column()
 
-        draw_properties(integrator_settings, integrator_settings.prop_names, col, "panel", 0)
+        draw_properties(integrator_settings, integrator_settings.prop_names, col)
 
     draw_subpanel("integrator")
 
-def draw_properties(node, prop_names, layout, place, number):
+def draw_properties(node, prop_names, layout, place = "panel", number = 0):
     col = layout.column()
     props_list = []
     for prop_name in prop_names:
@@ -1010,7 +1003,7 @@ class DATA_PT_renderman_camera(ShaderPanel, Panel):
         layout.prop(cam.renderman, "projection_type")
         if cam.renderman.projection_type != 'none':
             projection_node = cam.renderman.get_projection_node()
-            draw_properties(projection_node, projection_node.prop_names, layout,  "panel", 0)
+            draw_properties(projection_node, projection_node.prop_names, layout)
 
     draw_subpanel("camera")
 
@@ -1094,7 +1087,7 @@ class DATA_PT_renderman_display_filters(CollectionPanel, Panel):
         layout.prop(item, 'filter_type')
         layout.separator()
         filter_node = item.get_filter_node()
-        draw_properties(filter_node, filter_node.prop_names, layout, "panel", 0)
+        draw_properties(filter_node, filter_node.prop_names, layout)
 
     @classmethod
     def poll(cls, context):
@@ -1124,10 +1117,10 @@ class DATA_PT_renderman_Sample_filters(CollectionPanel, Panel):
         rm = scene.renderman
         layout.prop(item, 'filter_type')
         filter_node = item.get_filter_node()
-        draw_properties(filter_node, filter_node.prop_names, layout, "panel", 0)
+        draw_properties(filter_node, filter_node.prop_names, layout)
         if rm.sample_filters[0].filter_type == "PxrWatermarkFilter":
             layout.label(text="TxMake Options:")
-            draw_properties(filter_node, filter_node.prop_names, layout, "subpanel", 0)
+            draw_properties(filter_node, filter_node.prop_names, layout, "subpanel")
 
     @classmethod
     def poll(cls, context):
