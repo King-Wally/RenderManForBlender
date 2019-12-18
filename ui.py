@@ -35,7 +35,7 @@ from . import engine
 from bl_ui.properties_particle import ParticleButtonsPanel
 
 # helper functions for parameters
-from .nodes import draw_nodes_properties_ui, draw_node_properties_recursive
+from .nodes import draw_nodes_properties_ui, draw_node_properties_recursive, socket_node_input
 
 
 def get_panels():
@@ -284,59 +284,106 @@ class RENDER_PT_renderman_sampling_preview(Panel):
 
 
 def draw_subpanel(panel):
-    def panel_set(panel, context):
-        if panel == "integrator":
-            scene = context.scene
-            rm = scene.renderman
-            settings = getattr(rm, "%s_settings" % rm.integrator)
+
+# Define node
+    def get_node(panel, context):
+        if panel == "integrator" or panel == "advanced_integrator":
+            rm = context.scene.renderman
+            node = getattr(rm, "%s_settings" % rm.integrator)
 
         if panel == "world":
             world = context.scene.world
-            settings = world.renderman.get_light_node()
+            node = world.renderman.get_light_node()
 
         if panel == "light":
             light = context.light
-            settings = light.renderman.get_light_node()
+            node = light.renderman.get_light_node()
 
         if panel == "camera":
             cam = context.camera
-            settings = cam.renderman.get_projection_node()
-        return settings
+            node = cam.renderman.get_projection_node()
 
+        return node
+
+# Hide unused subpanels
     @classmethod
     def poll(self, context):
-
         if panel == "world" and context.scene.world.renderman.renderman_type == 'NONE':
             return
+
         elif panel == "camera" and context.camera.renderman.projection_type == 'none':
             return
+
         elif panel == "light" and context.light.renderman.use_renderman_node == False:
             return
+
+        elif panel == "material" or panel == "shader_light":
+            if is_renderman_nodetree(context.material):
+                if panel == "material":
+                    return panel_node_draw(self, context, 'Bxdf', "draw", self.number) == "open"
+                else:
+                    return panel_node_draw(self, context, 'Light', "draw", self.number) == "open"
+
+        elif panel == "advanced_material":
+            return panel_node_draw(self, context, 'Bxdf', "advanced_draw", self.number) == "open"
+
         else:
-            panel_settings = panel_set(panel, context)
-            return draw_panel(panel_settings, panel_settings.prop_names, self.number) == 'open'
+            node = get_node(panel, context)
+            return draw_panel(node, node.prop_names, self.number, panel) == 'open'
 
-
+# Get header title
     def draw_header(self, context):
-        panel_settings = panel_set(panel, context)
-
         layout = self.layout
-        draw_properties(panel_settings, panel_settings.prop_names, layout, "header" , self.number)
+        if panel == "material":
+            panel_node_draw(layout, context, 'Bxdf', "header", self.number)
+        elif panel == "advanced_material":
+            panel_node_draw(layout, context, 'Bxdf', "subheader", self.number)
+        elif panel == "shader_light":
+            panel_node_draw(layout, context, 'Light', "header", self.number)
+        elif panel == "advanced_integrator":
+            node = get_node(panel, context)
+            draw_properties(node, node.prop_names, self, "subheader" , self.number)
+        else:
+            node = get_node(panel, context)
+            draw_properties(node, node.prop_names, self, "header" , self.number)
 
+# Draw properties
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        panel_settings = panel_set(panel, context)
+        if panel == "material":
+            panel_node_draw(layout, context, 'Bxdf', "subpanel", self.number)
+        elif panel == "advanced_material":
+            panel_node_draw(layout, context, 'Bxdf', "subsubpanel", self.number)
+        elif panel == "shader_light":
+            panel_node_draw(layout, context, 'Light', "subpanel", self.number)
+        elif panel == "advanced_integrator":
+            node = get_node(panel, context)
+            draw_properties(node, node.prop_names, self, "subsubpanel" , self.number)
+        else:
+            node = get_node(panel, context)
+            draw_properties(node, node.prop_names, self, "subpanel" , self.number)
 
-        col = layout.column()
-        draw_properties(panel_settings, panel_settings.prop_names, col, "subpanel" , self.number)
-
-    for i in range(10):
+# Create subpanels and assign them to parent panel
+    x = 0
+    for i in range(26):
         idname = "RENDER_PT_renderman_"+panel+"_subpanel_%d" % i
         if panel == "integrator":
             parent = "RENDER_PT_renderman_integrator"
+        elif panel == "material":
+            parent = "MATERIAL_PT_renderman_shader_surface"
+        elif panel == "shader_light":
+            parent = "MATERIAL_PT_renderman_shader_light"
+        elif panel == "advanced_material":
+            if i % 2 == 0:
+                parent = "RENDER_PT_renderman_material_subpanel_%d" % x
+                x += 1
+        elif panel == "advanced_integrator":
+            if i % 2 == 0:
+                parent = "RENDER_PT_renderman_integrator_subpanel_%d" % x
+                x += 1
         else:
             parent = "DATA_PT_renderman_"+ panel
         index = i
@@ -350,6 +397,123 @@ def draw_subpanel(panel):
                )
         subpanel_classes.append(opclass)
 
+def draw_properties(node, prop_names, self, place = "panel", number = 0):
+    layout = self.layout
+    col = layout.column()
+    props_list = []
+    props_list_advanced = []
+    for prop_name in prop_names:
+        prop_meta = node.prop_meta[prop_name]
+        prop = getattr(node, prop_name)
+
+        # Hide notes
+        if prop_name == "Notes":
+            continue
+
+        if prop_meta['renderman_type'] == 'page':
+            props_list.append(prop_name)
+
+        else:
+         if place == "panel":
+            col.prop(node, prop_name)
+
+    length = len(props_list)
+
+    if place == "header":
+        if number < length:
+            props_list_attr = getattr(node, props_list[number])
+            for prop in props_list_attr:
+                if prop.startswith('enable'):
+                    self.layout.prop(node, prop, text="")
+                else:
+                    return layout.label(text = props_list[number])
+
+    if place == "subheader":
+        i = int(number / 2)
+        if number < length * 2:
+            props_list_attr = getattr(node, props_list[i])
+            for prop in props_list_attr:
+                prop_meta = node.prop_meta[prop]
+                if prop_meta['renderman_type'] == 'page':
+                    prop_split = prop.split(".")[1]
+                    props_list_advanced.append(prop_split)
+                    if len(props_list_advanced) == 2 and number % 2 != 0:
+                        return layout.label(text = props_list_advanced[1])
+                    if len(props_list_advanced) == 1 and number % 2 == 0:
+                        return layout.label(text = props_list_advanced[0])
+
+    if place == "subpanel":
+        if number < length:
+            if props_list[number] == "Falloff" or props_list[number] == "Ramp":
+                rm = bpy.context.light.renderman
+                nt = bpy.context.light.node_tree
+                float_node = nt.nodes[rm.float_ramp_node]
+                layout.template_curve_mapping(float_node, 'mapping')
+            elif props_list[number] == "Color Ramp":
+                rm = bpy.context.light.renderman
+                nt = bpy.context.light.node_tree
+                ramp_node = nt.nodes[rm.color_ramp_node]
+                layout.template_color_ramp(ramp_node, 'color_ramp')
+            else:
+                props_list_attr = getattr(node, props_list[number])
+                for prop in props_list_attr:
+                    prop_meta = node.prop_meta[prop]
+                    if prop_meta['renderman_type'] == 'page':
+                        continue
+                    else:
+                        if prop.startswith('enable'):
+                            continue
+                        else:
+                            col.prop(node, prop)
+
+    if place == "subsubpanel":
+        i = int(number / 2)
+        props_list_attr = getattr(node, props_list[i])
+        for prop in props_list_attr:
+            prop_meta = node.prop_meta[prop]
+            if prop_meta['renderman_type'] == 'page':
+                props_list_advanced.append(prop)
+
+        if number % 2 == 0:
+            props_list_advanced_attr = getattr(node, props_list_advanced[0])
+            for pr in props_list_advanced_attr:
+                col.prop(node, pr)
+        if number % 2 != 0 and len(props_list_advanced) == 2:
+            props_list_advanced_attr = getattr(node, props_list_advanced[1])
+            for pr in props_list_advanced_attr:
+                col.prop(node, pr)
+
+def draw_panel(node, prop_names, number, panel):
+    props_list = []
+    props_list_advanced = []
+    for prop_name in prop_names:
+        prop_meta = node.prop_meta[prop_name]
+        if prop_name == "Notes":
+            continue
+
+        if prop_meta['renderman_type'] == 'page':
+            props_list.append(prop_name)
+
+    length = len(props_list)
+
+    if panel.startswith("advanced"):
+        i = int(number / 2)
+        if number < length * 2:
+            props_list_attr = getattr(node, props_list[i])
+            for prop in props_list_attr:
+                prop_meta = node.prop_meta[prop]
+                if prop_meta['renderman_type'] == 'page':
+                    prop_split = prop.split(".")[0]
+                    if prop_split in props_list_advanced:
+                        if number % 2 != 0:
+                            return "open"
+                    else:
+                        props_list_advanced.append(prop_split)
+                        if number % 2 == 0:
+                            return "open"
+
+    elif number < length:
+        return "open"
 
 class RENDER_PT_renderman_integrator(PRManButtonsPanel, Panel):
     bl_label = "Integrator"
@@ -371,61 +535,19 @@ class RENDER_PT_renderman_integrator(PRManButtonsPanel, Panel):
         layout.separator()
         col = layout.column()
 
-        draw_properties(integrator_settings, integrator_settings.prop_names, col)
+        draw_properties(integrator_settings, integrator_settings.prop_names, self)
 
     draw_subpanel("integrator")
-
-def draw_properties(node, prop_names, layout, place = "panel", number = 0):
-    col = layout.column()
-    props_list = []
-    for prop_name in prop_names:
-        prop_meta = node.prop_meta[prop_name]
-        prop = getattr(node, prop_name)
-
-        if prop_name == "Notes":
-            continue
-
-        if prop_meta['renderman_type'] == 'page':
-            props_list.append(prop_name)
-
-        if prop_meta['renderman_type'] != 'page' and place == "panel":
-            col.prop(node, prop_name)
-
-    if place == "header":
-        return layout.label(text = props_list[number])
-
-    if place == "subpanel":
-        if props_list[number] == "Falloff" or props_list[number] == "Ramp":
-            rm = bpy.context.light.renderman
-            nt = bpy.context.light.node_tree
-            float_node = nt.nodes[rm.float_ramp_node]
-            layout.template_curve_mapping(float_node, 'mapping')
-        elif props_list[number] == "Color Ramp":
-            rm = bpy.context.light.renderman
-            nt = bpy.context.light.node_tree
-            ramp_node = nt.nodes[rm.color_ramp_node]
-            layout.template_color_ramp(ramp_node, 'color_ramp')
-        else:
-            props_list_attr = getattr(node, props_list[number])
-            for prop in props_list_attr:
-                col.prop(node, prop)
-
-def draw_panel(node, prop_names, number):
-    props_list = []
-    for prop_name in prop_names:
-        prop_meta = node.prop_meta[prop_name]
-        if prop_name == "Notes":
-            continue
-
-        if prop_meta['renderman_type'] == 'page':
-            props_list.append(prop_name)
-    count = len(props_list)
-    if number < count:
-        return "open"
+    draw_subpanel("advanced_integrator")
 
 class RENDER_PT_renderman_spooling(PRManButtonsPanel, Panel):
     bl_label = "External Rendering"
     bl_options = {'DEFAULT_CLOSED'}
+
+    def draw_header(self, context):
+        rm = context.scene.renderman
+
+        self.layout.prop(rm, 'enable_external_rendering', text="")
 
     def draw(self, context):
         self.layout.use_property_split = True
@@ -434,9 +556,6 @@ class RENDER_PT_renderman_spooling(PRManButtonsPanel, Panel):
         layout = self.layout
         scene = context.scene
         rm = scene.renderman
-
-        col = layout.column()
-        col.prop(rm, 'enable_external_rendering')
 
         # button
         icons = load_icons()
@@ -566,15 +685,17 @@ class RENDER_PT_renderman_motion_blur(PRManButtonsPanel, Panel):
     bl_label = "Motion Blur"
     bl_options = {'DEFAULT_CLOSED'}
 
+    def draw_header(self, context):
+        rm = context.scene.renderman
+
+        self.layout.prop(rm, "motion_blur", text="")
+
     def draw(self, context):
         self.layout.use_property_split = True
         self.layout.use_property_decorate = False
 
         rm = context.scene.renderman
         layout = self.layout
-
-        col = layout.column()
-        col.prop(rm, "motion_blur")
 
         col = layout.column()
         col.enabled = rm.motion_blur
@@ -797,43 +918,27 @@ class MATERIAL_PT_renderman_preview(Panel, ShaderPanel):
 
 class MATERIAL_PT_renderman_shader_surface(ShaderPanel, Panel):
     bl_context = "material"
-    bl_label = "Bxdf"
+    bl_label = "Surface"
     shader_type = 'Bxdf'
 
     def draw(self, context):
-        mat = context.material
         layout = self.layout
-        if context.material.renderman and context.material.node_tree:
-            nt = context.material.node_tree
+        layout.use_property_split = True
+        layout.use_property_decorate = False
 
-            if is_renderman_nodetree(mat):
-                panel_node_draw(layout, context, mat,
-                                'RendermanOutputNode', 'Bxdf')
-                # draw_nodes_properties_ui(
-                #    self.layout, context, nt, input_name=self.shader_type)
-            else:
-                if not panel_node_draw(layout, context, mat, 'ShaderNodeOutputMaterial', 'Surface'):
-                    layout.prop(mat, "diffuse_color")
+        mat = context.material
+        rm = mat.renderman
+        row = layout.row()
+
+        if is_renderman_nodetree(mat):
+            panel_node_draw(layout, context, input_name='Bxdf')
 
         else:
-            # if no nodetree we use pxrdisney
-            mat = context.material
-            rm = mat.renderman
-
-            row = layout.row()
-            row.prop(mat, "diffuse_color")
-
-            layout.separator()
-        if mat and not is_renderman_nodetree(mat):
-            rm = mat.renderman
-            row = layout.row()
             row.prop(rm, "copy_color_params")
-            layout.operator(
-                'shading.add_renderman_nodetree').idtype = "material"
-            #layout.operator('shading.convert_cycles_stuff')
+            layout.operator('shading.add_renderman_nodetree').idtype = "material"
 
-        # self._draw_shader_menu_params(layout, context, rm)
-
+    draw_subpanel("material")
+    draw_subpanel("advanced_material")
 
 class MATERIAL_PT_renderman_shader_light(ShaderPanel, Panel):
     bl_context = "material"
@@ -841,10 +946,13 @@ class MATERIAL_PT_renderman_shader_light(ShaderPanel, Panel):
     shader_type = 'Light'
 
     def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
         if context.material.node_tree:
-            nt = context.material.node_tree
-            draw_nodes_properties_ui(
-                self.layout, context, nt, input_name=self.shader_type)
+
+            panel_node_draw(layout, context, input_name='Light')
+    draw_subpanel("shader_light")
 
 
 class MATERIAL_PT_renderman_shader_displacement(ShaderPanel, Panel):
@@ -853,10 +961,11 @@ class MATERIAL_PT_renderman_shader_displacement(ShaderPanel, Panel):
     shader_type = 'Displacement'
 
     def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
         if context.material.node_tree:
-            nt = context.material.node_tree
-            draw_nodes_properties_ui(
-                self.layout, context, nt, input_name=self.shader_type)
+            panel_node_draw(layout, context, input_name='Displacement')
             # BBM addition begin
 
         # BBM addition end
@@ -1003,7 +1112,7 @@ class DATA_PT_renderman_camera(ShaderPanel, Panel):
         layout.prop(cam.renderman, "projection_type")
         if cam.renderman.projection_type != 'none':
             projection_node = cam.renderman.get_projection_node()
-            draw_properties(projection_node, projection_node.prop_names, layout)
+            draw_properties(projection_node, projection_node.prop_names, self)
 
     draw_subpanel("camera")
 
@@ -1087,7 +1196,7 @@ class DATA_PT_renderman_display_filters(CollectionPanel, Panel):
         layout.prop(item, 'filter_type')
         layout.separator()
         filter_node = item.get_filter_node()
-        draw_properties(filter_node, filter_node.prop_names, layout)
+        draw_properties(filter_node, filter_node.prop_names, self)
 
     @classmethod
     def poll(cls, context):
@@ -1117,10 +1226,10 @@ class DATA_PT_renderman_Sample_filters(CollectionPanel, Panel):
         rm = scene.renderman
         layout.prop(item, 'filter_type')
         filter_node = item.get_filter_node()
-        draw_properties(filter_node, filter_node.prop_names, layout)
+        draw_properties(filter_node, filter_node.prop_names, self)
         if rm.sample_filters[0].filter_type == "PxrWatermarkFilter":
             layout.label(text="TxMake Options:")
-            draw_properties(filter_node, filter_node.prop_names, layout, "subpanel")
+            draw_properties(filter_node, filter_node.prop_names, self, "subpanel")
 
     @classmethod
     def poll(cls, context):

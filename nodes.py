@@ -723,29 +723,65 @@ def find_node_input(node, name):
 
     return None
 
+def draw_panel(context, place, number, input_name, output_node_type="output"):
+    nt = context.material.node_tree
+    output_node = next((n for n in nt.nodes
+                        if hasattr(n, 'renderman_node_type') and n.renderman_node_type == output_node_type), None)
 
-def panel_node_draw(layout, context, id_data, output_type, input_name):
-    ntree = id_data.node_tree
+    if output_node is None:
+        return "closed"
 
-    node = find_node(id_data, output_type)
-    if not node:
-        layout.label(text="No output node")
-    else:
-        input = find_node_input(node, input_name)
-        #layout.template_node_view(ntree, node, input)
-        draw_nodes_properties_ui(layout, context, ntree)
+    socket = output_node.inputs[input_name]
+    node = socket_node_input(nt, socket)
 
-    return True
+    if node is not None:
+        prop_names = node.prop_names
+        props_list = []
+        props_list_advanced = []
+        for prop_name in prop_names:
+            prop_meta = node.prop_meta[prop_name]
+            if prop_name == "Notes":
+                continue
 
+            if prop_meta['renderman_type'] == 'page':
+                props_list.append(prop_name)
+
+        length = len(props_list)
+
+        if place.startswith("advanced"):
+            i = int(number / 2)
+            if number < length * 2:
+                props_list_attr = getattr(node, props_list[i])
+                for prop in props_list_attr:
+                    prop_meta = node.prop_meta[prop]
+                    if prop_meta['renderman_type'] == 'page':
+                        prop_split = prop.split(".")[0]
+                        if prop_split in props_list_advanced:
+                            if number % 2 != 0:
+                                return "open"
+                        else:
+                            props_list_advanced.append(prop_split)
+                            if number % 2 == 0:
+                                return "open"
+        elif number < length:
+            return "open"
+
+
+def panel_node_draw(layout, context, input_name, place = "panel", number = 0):
+
+    if place == "draw" or place == "advanced_draw":
+        return draw_panel(context, place, number, input_name)
+
+    draw_nodes_properties_ui(layout, context, place, number, input_name)
 
 def is_renderman_nodetree(material):
     return find_node(material, 'RendermanOutputNode')
 
-
-def draw_nodes_properties_ui(layout, context, nt, input_name='Bxdf',
-                             output_node_type="output"):
+def draw_nodes_properties_ui(layout, context, place = "panel", number = 0, input_name='Bxdf', output_node_type="output"):
+    nt = context.material.node_tree
     output_node = next((n for n in nt.nodes
                         if hasattr(n, 'renderman_node_type') and n.renderman_node_type == output_node_type), None)
+
     if output_node is None:
         return
 
@@ -756,20 +792,22 @@ def draw_nodes_properties_ui(layout, context, nt, input_name='Bxdf',
     layout.context_pointer_set("node", output_node)
     layout.context_pointer_set("socket", socket)
 
-    split = layout.split(factor=0.35)
-    split.label(text=socket.name + ':')
+    if place == "panel":
+        split = layout.split(factor=0.49)
+        split.alignment='RIGHT'
+        split.label(text=socket.name + ':')
 
-    if socket.is_linked:
-        # for lights draw the shading rate ui.
+        if socket.is_linked:
+            # for lights draw the shading rate ui.
 
-        split.operator_menu_enum("node.add_%s" % input_name.lower(),
-                                 "node_type", text=node.bl_label)
-    else:
-        split.operator_menu_enum("node.add_%s" % input_name.lower(),
-                                 "node_type", text='None')
+            split.operator_menu_enum("node.add_%s" % input_name.lower(),
+                                     "node_type", text=node.bl_label)
+        else:
+            split.operator_menu_enum("node.add_%s" % input_name.lower(),
+                                     "node_type", text='None')
 
-    if node is not None:
-        draw_node_properties_recursive(layout, context, nt, node)
+    if node is not None and place is not "draw":
+        draw_node_properties_recursive(layout, context, nt, node, place, number)
 
 
 def socket_node_input(nt, socket):
@@ -786,8 +824,7 @@ def linked_sockets(sockets):
     return [i for i in sockets if i.is_linked]
 
 
-def draw_node_properties_recursive(layout, context, nt, node, level=0):
-
+def draw_node_properties_recursive(layout, context, nt, node, place="panel", number=0):
     def indented_label(layout, label, level):
         for i in range(level):
             layout.label(text='', icon='BLANK1')
@@ -797,158 +834,193 @@ def draw_node_properties_recursive(layout, context, nt, node, level=0):
     layout.context_pointer_set("node", node)
     layout.context_pointer_set("nodetree", nt)
 
-    def draw_props(prop_names, layout, level):
-        for prop_name in prop_names:
-            # skip showing the shape for PxrStdAreaLight
-            if prop_name in ["lightGroup", "rman__Shape", "coneAngle", "penumbraAngle"]:
-                continue
+    def draw_props(prop_names, layout):
+        def prop_menu_enum(node, prop):
+            prop_meta = node.prop_meta[prop]
 
-            if prop_name == "codetypeswitch":
-                row = layout.row()
-                if node.codetypeswitch == 'INT':
-                    row.prop_search(node, "internalSearch",
-                                    bpy.data, "texts", text="")
-                elif node.codetypeswitch == 'EXT':
-                    row.prop(node, "shadercode")
-            elif prop_name == "internalSearch" or prop_name == "shadercode" or prop_name == "expression":
-                pass
-            else:
-                prop_meta = node.prop_meta[prop_name]
-                prop = getattr(node, prop_name)
+            # else check if the socket with this name is connected
+            socket = node.inputs[prop] if prop in node.inputs \
+                else None
+            layout.context_pointer_set("socket", socket)
 
-                if 'widget' in prop_meta and prop_meta['widget'] == 'null' or \
-                        'hidden' in prop_meta and prop_meta['hidden']:
-                    continue
-
-                # else check if the socket with this name is connected
-                socket = node.inputs[prop_name] if prop_name in node.inputs \
-                    else None
-                layout.context_pointer_set("socket", socket)
-
-                if socket and socket.is_linked:
-                    input_node = socket_node_input(nt, socket)
-                    icon = 'DISCLOSURE_TRI_DOWN' if socket.ui_open \
-                        else 'DISCLOSURE_TRI_RIGHT'
-
-                    split = layout.split(factor=NODE_LAYOUT_SPLIT)
-                    row = split.row()
-                    indented_label(row, None, level)
-                    row.prop(socket, "ui_open", icon=icon, text='',
-                             icon_only=True, emboss=False)
-                    label = prop_meta.get('label', prop_name)
-                    row.label(text=label + ':')
-                    if ('type' in prop_meta and prop_meta['type'] == 'vstruct') or prop_name == 'inputMaterial':
-                        split.operator_menu_enum("node.add_layer", "node_type",
-                                                 text=input_node.bl_label, icon="LAYER_USED")
-                    elif prop_meta['renderman_type'] == 'struct':
-                        split.operator_menu_enum("node.add_manifold", "node_type",
-                                                 text=input_node.bl_label, icon="LAYER_USED")
-                    elif prop_meta['renderman_type'] == 'normal':
-                        split.operator_menu_enum("node.add_bump", "node_type",
-                                                 text=input_node.bl_label, icon="LAYER_USED")
-                    else:
-                        split.operator_menu_enum("node.add_pattern", "node_type",
-                                                 text=input_node.bl_label, icon="LAYER_USED")
-
-                    if socket.ui_open:
-                        draw_node_properties_recursive(layout, context, nt,
-                                                       input_node, level=level + 1)
-
-                else:
-                    row = layout.row(align=True)
-                    if prop_meta['renderman_type'] == 'page':
-                        ui_prop = prop_name + "_uio"
-                        ui_open = getattr(node, ui_prop)
-                        icon = 'DISCLOSURE_TRI_DOWN' if ui_open \
-                            else 'DISCLOSURE_TRI_RIGHT'
-
-                        split = layout.split(factor=NODE_LAYOUT_SPLIT)
-                        for i in range(level):
-                            row.label(text='', icon='BLANK1')
-
-                        row.prop(node, ui_prop, icon=icon, text='',
-                                 icon_only=True, emboss=False)
-                        sub_prop_names = list(prop)
-                        if node.bl_idname in {"PxrSurfaceBxdfNode", "PxrLayerPatternNode"}:
-                            for pn in sub_prop_names:
-                                if pn.startswith('enable'):
-                                    row.prop(node, pn, text='')
-                                    sub_prop_names.remove(pn)
-                                    break
-
-                        row.label(text=prop_name + ':')
-
-                        if ui_open:
-                            draw_props(sub_prop_names, layout, level + 1)
-
-                    else:
-                        indented_label(row, None, level)
-                        # indented_label(row, socket.name+':')
-                        # don't draw prop for struct type
-                        if "Subset" in prop_name and prop_meta['type'] == 'string':
-                            row.prop_search(node, prop_name, bpy.data.scenes[0].renderman,
-                                            "object_groups")
-                        else:
-                            if prop_meta['renderman_type'] != 'struct':
-                                row.prop(node, prop_name, slider=True)
-                            else:
-                                row.label(text=prop_meta['label'])
-                        if prop_name in node.inputs:
-                            if ('type' in prop_meta and prop_meta['type'] == 'vstruct') or prop_name == 'inputMaterial':
-                                row.operator_menu_enum("node.add_layer", "node_type",
-                                                       text='', icon="LAYER_USED")
-                            elif prop_meta['renderman_type'] == 'struct':
-                                row.operator_menu_enum("node.add_manifold", "node_type",
-                                                       text='', icon="LAYER_USED")
-                            elif prop_meta['renderman_type'] == 'normal':
-                                row.operator_menu_enum("node.add_bump", "node_type",
-                                                       text='', icon="LAYER_USED")
-                            else:
-                                row.operator_menu_enum("node.add_pattern", "node_type",
-                                                       text='', icon="LAYER_USED")
-
-    # if this is a cycles node do something different
-    if not hasattr(node, 'plugin_name') or node.bl_idname == 'PxrOSLPatternNode':
-        node.draw_buttons(context, layout)
-        for input in node.inputs:
-            if input.is_linked:
-                input_node = socket_node_input(nt, input)
-                icon = 'DISCLOSURE_TRI_DOWN' if input.show_expanded \
+            if socket and socket.is_linked:
+                input_node = socket_node_input(nt, socket)
+                icon = 'DISCLOSURE_TRI_DOWN' if socket.ui_open \
                     else 'DISCLOSURE_TRI_RIGHT'
 
-                split = layout.split(factor=NODE_LAYOUT_SPLIT)
-                row = split.row()
-                indented_label(row, None, level)
-                row.prop(input, "show_expanded", icon=icon, text='',
-                         icon_only=True, emboss=False)
-                row.label(text=input.name + ':')
-                split.operator_menu_enum("node.add_pattern", "node_type",
-                                         text=input_node.bl_label, icon="LAYER_USED")
+                row = layout.row()
 
-                if input.show_expanded:
-                    draw_node_properties_recursive(layout, context, nt,
-                                                   input_node, level=level + 1)
+                label = prop_meta.get('label', prop_name)
+
+                split = row.split(factor=0.49, align=True)
+                split2 = split.split(factor=0.4, align=True)
+                split3 = split2.split(factor=0.35, align=True)
+
+                split3.label(icon="BLANK1")
+                split3.prop(socket, "ui_open", icon=icon, icon_only=True, emboss=False)
+
+                split2.alignment='RIGHT'
+                split2.label(text=label)
+                if ('type' in prop_meta and prop_meta['type'] == 'vstruct') or prop == 'inputMaterial':
+                    split.operator_menu_enum("node.add_layer", "node_type",
+                                             text=input_node.bl_label, icon="LAYER_USED")
+                elif prop_meta['renderman_type'] == 'struct':
+                    split.operator_menu_enum("node.add_manifold", "node_type",
+                                             text=input_node.bl_label, icon="LAYER_USED")
+                elif prop_meta['renderman_type'] == 'normal':
+                    split.operator_menu_enum("node.add_bump", "node_type",
+                                             text=input_node.bl_label, icon="LAYER_USED")
+                else:
+                    split.operator_menu_enum("node.add_pattern", "node_type",
+                                             text=input_node.bl_label, icon="LAYER_USED")
+                if socket.ui_open:
+                    draw_node_properties_recursive(layout, context, nt, input_node, "node_socket")
 
             else:
-                row = layout.row(align=True)
-                indented_label(row, None, level)
-                # indented_label(row, socket.name+':')
-                # don't draw prop for struct type
-                if input.hide_value:
-                    row.label(text=input.name)
+                if prop_meta['renderman_type'] == 'page':
+                    prop_attr = getattr(node, prop)
+                    for pr in prop_attr:
+                        prop_menu_enum(node, pr)
                 else:
-                    row.prop(input, 'default_value',
-                             slider=True, text=input.name)
-                row.operator_menu_enum("node.add_pattern", "node_type",
-                                       text='', icon="LAYER_USED")
-    else:
-        if node.plugin_name == 'PxrRamp':
-            dummy_nt = bpy.data.node_groups[node.node_group]
-            if dummy_nt:
-                layout.template_color_ramp(
-                    dummy_nt.nodes['ColorRamp'], 'color_ramp')
-        draw_props(node.prop_names, layout, level)
-    layout.separator()
+                    if prop in node.inputs:
+                        row = layout.row()
+                        row.prop(node, prop)
+                        if ('type' in prop_meta and prop_meta['type'] == 'vstruct') or prop == 'inputMaterial':
+                            row.operator_menu_enum("node.add_layer", "node_type", text='', icon="LAYER_USED")
+                        elif prop_meta['renderman_type'] == 'struct':
+                            row.operator_menu_enum("node.add_manifold", "node_type", text='', icon="LAYER_USED")
+                        elif prop_meta['renderman_type'] == 'normal':
+                            row.operator_menu_enum("node.add_bump", "node_type", text='', icon="LAYER_USED")
+                        else:
+                            row.operator_menu_enum("node.add_pattern", "node_type", text='', icon="LAYER_USED")
+                    else:
+                        col.prop(node, prop)
+
+        col = layout.column()
+        row = layout.row()
+        props_list = []
+        props_list_advanced = []
+        for prop_name in prop_names:
+            prop_meta = node.prop_meta[prop_name]
+            prop = getattr(node, prop_name)
+
+            if prop_meta['renderman_type'] == 'page':
+                if place == "node_socket":
+                    ui_prop = prop_name + "_uio"
+                    ui_open = getattr(node, ui_prop)
+                    icon = 'DISCLOSURE_TRI_DOWN' if ui_open \
+                        else 'DISCLOSURE_TRI_RIGHT'
+                    row = layout.row()
+                    split = row.split(factor=0.25, align=True)
+                    split2 = split.split(factor=0.45, align=True)
+                    split2.label(icon="BLANK1")
+                    split2.prop(node, ui_prop, icon=icon, icon_only=True, emboss=False)
+                    split.label(text=prop_name)
+                    if ui_open:
+                        sub_prop_names = list(prop)
+                        draw_props(sub_prop_names, layout)
+                else:
+                    props_list.append(prop_name)
+
+            else:
+             if place == "panel" or place == "node_socket":
+                prop_menu_enum(node, prop_name)
+
+        length = len(props_list)
+
+        if place == "header":
+            if number < length:
+                props_list_attr = getattr(node, props_list[number])
+                for prop in props_list_attr:
+                    if prop.startswith('enable'):
+                        layout.prop(node, prop, text="")
+                    else:
+                        return layout.label(text = props_list[number])
+
+        if place == "subheader":
+            i = int(number / 2)
+            if number < length * 2:
+                props_list_attr = getattr(node, props_list[i])
+                for prop in props_list_attr:
+                    prop_meta = node.prop_meta[prop]
+                    if prop_meta['renderman_type'] == 'page':
+                        prop_split = prop.split(".")[1]
+                        props_list_advanced.append(prop_split)
+                        if len(props_list_advanced) == 2 and number % 2 != 0:
+                            return layout.label(text = props_list_advanced[1])
+                        if len(props_list_advanced) == 1 and number % 2 == 0:
+                            return layout.label(text = props_list_advanced[0])
+
+        if place == "subpanel":
+            if number < length:
+                props_list_attr = getattr(node, props_list[number])
+                for prop in props_list_attr:
+                    prop_meta = node.prop_meta[prop]
+                    if prop_meta['renderman_type'] == 'page':
+                        props_list_advanced.append(prop)
+                    else:
+                        if prop.startswith('enable'):
+                            continue
+                        prop_menu_enum(node, prop)
+
+        if place == "subsubpanel":
+            i = int(number / 2)
+            props_list_attr = getattr(node, props_list[i])
+            for prop in props_list_attr:
+                prop_meta = node.prop_meta[prop]
+                if prop_meta['renderman_type'] == 'page':
+                    props_list_advanced.append(prop)
+
+            if number % 2 == 0:
+                props_list_advanced_attr = getattr(node, props_list_advanced[0])
+                for pr in props_list_advanced_attr:
+                    prop_menu_enum(node, pr)
+            if number % 2 != 0 and len(props_list_advanced) == 2:
+                props_list_advanced_attr = getattr(node, props_list_advanced[1])
+                for pr in props_list_advanced_attr:
+                    prop_menu_enum(node, pr)
+
+    # if this is a cycles node do something different
+    # if not hasattr(node, 'plugin_name') or node.bl_idname == 'PxrOSLPatternNode':
+    #     node.draw_buttons(context, layout)
+    #     for input in node.inputs:
+    #         if input.is_linked:
+    #             input_node = socket_node_input(nt, input)
+    #             icon = 'DISCLOSURE_TRI_DOWN' if input.show_expanded \
+    #                 else 'DISCLOSURE_TRI_RIGHT'
+    #
+    #             split = layout.split(factor=NODE_LAYOUT_SPLIT)
+    #             row = split.row()
+    #             indented_label(row, None, level)
+    #             row.prop(input, "show_expanded", icon=icon, text='',
+    #                      icon_only=True, emboss=False)
+    #             row.label(text=input.name + ':')
+    #             split.operator_menu_enum("node.add_pattern", "node_type",
+    #                                      text=input_node.bl_label, icon="LAYER_USED")
+    #
+    #             if input.show_expanded:
+    #                 draw_node_properties_recursive(layout, context, nt,
+    #                                                input_node)
+    #
+    #         else:
+    #             row = layout.row(align=True)
+    #             indented_label(row, None, level)
+    #             # indented_label(row, socket.name+':')
+    #             # don't draw prop for struct type
+    #             if input.hide_value:
+    #                 row.label(text=input.name)
+    #             else:
+    #                 row.prop(input, 'default_value',
+    #                          slider=True, text=input.name)
+    #             row.operator_menu_enum("node.add_pattern", "node_type",
+    #                                    text='', icon="LAYER_USED")
+    # else:
+    #     if node.plugin_name == 'PxrRamp':
+    #         dummy_nt = bpy.data.node_groups[node.node_group]
+    #         if dummy_nt:
+    #             layout.template_color_ramp(
+    #                 dummy_nt.nodes['ColorRamp'], 'color_ramp')
+    draw_props(node.prop_names, layout)
 
 
 # Operators
