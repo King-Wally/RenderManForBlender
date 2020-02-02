@@ -117,7 +117,7 @@ from bpy.props import (PointerProperty, StringProperty, BoolProperty,
 
 # ------- UI panel definitions -------
 narrowui = 180
-
+subpanel_classes = []
 
 class PRManButtonsPanel(_RManPanelHeader):
     bl_space_type = "PROPERTIES"
